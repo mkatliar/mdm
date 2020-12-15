@@ -1,0 +1,219 @@
+% mn2esample.tex
+%
+% v2.1 released 22nd May 2002 (G. Hutton)
+%
+% The mnsample.tex file has been amended to highlight
+% the proper use of LaTeX2e code with the class file
+% and using natbib cross-referencing. These changes
+% do not reflect the original paper by A. V. Raveendran.
+%
+% Previous versions of this sample document were
+% compatible with the LaTeX 2.09 style file mn.sty
+% v1.2 released 5th September 1994 (M. Reed)
+% v1.1 released 18th July 1994
+% v1.0 released 28th January 1994
+
+\documentclass[useAMS,usenatbib]{mn2e}
+\usepackage{dsfont}
+\usepackage{amsmath}
+
+\newcommand{\y}{\ensuremath{\mathbf{y}}}
+\newcommand{\e}{\ensuremath{\mathbf{e}}}
+\newcommand{\z}{\ensuremath{\mathbf{z}}}
+\newcommand{\x}{\ensuremath{\mathbf{x}}}
+\newcommand{\E}{\ensuremath{\mathrm{E}}}
+\newcommand{\X}{\ensuremath{\mathrm{X}}}
+\newcommand{\rr}{\ensuremath{\mathrm{r}}}
+\newcommand{\A}{\ensuremath{\mathrm{A}}}
+\newcommand{\T}{\ensuremath{\mathrm{T}}}
+\newcommand{\s}{\ensuremath{\mathrm{s}}}
+\newcommand{\F}{\ensuremath{\mathcal{F}}}
+
+% If your system does not have the AMS fonts version 2.0 installed, then
+% remove the useAMS option.
+%
+% useAMS allows you to obtain upright Greek characters.
+% e.g. \umu, \upi etc.  See the section on "Upright Greek characters" in
+% this guide for further information.
+%
+% If you are using AMS 2.0 fonts, bold math letters/symbols are available
+% at a larger range of sizes for NFSS release 1 and 2 (using \boldmath or
+% preferably \bmath).
+%
+% The usenatbib command allows the use of Patrick Daly's natbib.sty for
+% cross-referencing.
+%
+% If you wish to typeset the paper in Times font (if you do not have the
+% PostScript Type 1 Computer Modern fonts you will need to do this to get
+% smoother fonts in a PDF file) then uncomment the next line
+% \usepackage{Times}
+
+%%%%% AUTHORS - PLACE YOUR OWN MACROS HERE %%%%%
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\title[Visible galaxy shear measurement in the presence of a convolution kernel]{Visible galaxy shear measurement in the presence of a convolution kernel}
+\author[Mikhail Katliar]{Mikhail Katliar$^{1}$\thanks{E-mail:
+cepstr@gmail.com}\\
+$^{1}$10-79, Burdeynogo str., Minsk 220140, Belarus}
+\begin{document}
+
+%\date{Accepted 1988 December 15. Received 1988 December 14; in original form 1988 October 11}
+
+\pagerange{0--0} \pubyear{0000}
+
+\maketitle
+
+\label{firstpage}
+
+\begin{abstract}
+The aim is to measure the shapes of galaxies to reconstruct the gravitational lensing signal in the presence of noise. Information about point spread function is provided by star images.
+
+The method is tested on simulated galaxies from the Mapping Dark Matter (MDM) challenge.
+\end{abstract}
+
+\begin{keywords}
+Gravitational lensing - Methods: numerical, statistical
+\end{keywords}
+
+\section{Introduction}
+The problem of shape measurement in optical
+imaging data is that galaxy images are convolved with a possibly
+varying point spread function (PSF) which must be accurately corrected
+for when deducing galaxy shape.
+
+\section[]{A probabilistic approach to shape measurement}
+The data consists of simulated galaxy images, paired with star images, which provide information about PSF.
+
+An observation of a galaxy and a star yields two surface
+brightness distributions denoted by a vector of pixel
+values. This vector can be transformed, yielding an observation vector $\y \in \mathds{R}^N$. The shape of the galaxy may be characterized by its two-component
+ellipticity $\e \in \mathds{R}^2$.
+
+The goal is to find a value of ellipticity $\hat{\e}(\y)$ such that the expected ellipticity error is minimized:
+\begin{equation}
+\hat{\e}(\y) = \underset{\e'}{\operatorname{argmin}}\, \E_{\e \mid \y}\left(\left.\left|\e'-\e\right|^2 \,\right|\, \y \right) = \E_{\e \mid \y}(\e \mid \y).
+\end{equation}
+where $f_{\e \mid \y}$ is the PDF of galaxy ellipticity $\e$ given observation vector $\y$.
+
+\begin{multline}
+\E_{\e \mid \y}(\e \mid \y) = \int\limits_\X \e(\x) f_{\x \mid \y}\left(\x \mid \y \right)\,d\x = \\ = \frac{\int_X \e(\x) f_{\y\mid \x}(\y \mid \x) f_{\x}(\x) \, d\x}{\int_X f_{\y\mid \x}(\y \mid \x') f_{\x}(\x') \, d\x'}
+\label{eq:estimator}
+\end{multline}
+where $\x$ is a full vector of image parameters.
+
+The expression for $f_{\y \mid \x}$ can be constructed later based on a model of signal and noise. This will be done in Section~\ref{sec:Signal and noise}.
+
+Prior distribution of model parameters is given by $f_\x$. The simplest choice is to assume uniform prior, in which case $f_\x$ cancels out in \eqref{eq:estimator}. Another choice is to estimate $f_\x$ from a dataset:
+\begin{multline}
+f_{\x}(\x) = \int f_{\x \mid \y}(\x \mid \y) f_\y(\y) \,d\y \approx \frac{1}{N} \sum_{i=1}^N f_{\x \mid \y}(\x \mid \y_i) = \\ = \frac{1}{N} \sum_{i=1}^N \frac{f_{\y\mid \x}(\y_i \mid \x) f_{\x}(\x)}{\int_X f_{\y\mid \x}(\y_i \mid \x') f_{\x}(\x') \, d\x'}.
+\label{eq:prior}
+\end{multline}
+It seems there is no obvious way to solve \eqref{eq:prior} for $f_\x$. One of the options is to use iterative procedure:
+\begin{eqnarray}
+f_{\x}^{(0)}(\x) & =& \mathrm{const},\\
+f_\x^{(k)}(\x) &=& \frac{1}{N} \sum_{i=1}^N \frac{f_{\y\mid \x}(\y_i \mid \x) f_\x^{(k-1)}(\x)}{\int_X f_{\y\mid \x}(\y_i \mid \x') f_\x^{(k-1)}(\x')\, d\x'}.
+\end{eqnarray}
+
+\section[]{Signal and noise model}
+\label{sec:Signal and noise}
+Let's assume that both intrinsic 2D intensity distribution produced by a galaxy and a PSF have elliptic contour lines:
+\begin{equation}
+I_g(\rr) = I_{g0} \,p_g\left(\sqrt{\rr^T \A(\s_g)\, \rr}\right)
+\end{equation}
+\begin{equation}
+h(\rr) = p_s\left(\sqrt{\rr^T \A(\s_s)\, \rr}\right)
+\end{equation}
+where $I_{g0}$ is galaxy intensity factor, $\s_g$ and $\s_s$ are shape parameters of galaxy and PSF, respectively, $\A(\s)=\T(\s)^T\T(\s)$, $\T(\s)$ is a transform from screen coordinates to ``unsheared'' coordinate system, in which intensity contour lines are circular, $p_g$ is galaxy intensity profile, $p_s$ is PSF profile, and $\rr$ is 2D pixel coordinate.
+
+Observed intensity distribution can be defined by expression
+\begin{multline}
+s = (I_g \otimes h \otimes \Pi_{1\times 1} + n) \Pi_{M\times M} \approx \\ \approx I_g \otimes h \otimes \Pi_{1\times 1} + n\, \Pi_{M\times M},
+\label{eq:signal}
+\end{multline}
+where $\Pi_{x\times y}$ is 2D rectangle function of size $x\times y$, $n$ is a noise. Assuming that $n$ is a Poissonian noise, and noise samples for every pixel are independent, it is possible to draw an expression for likelihood $f_{\y\mid\x}$. However, it is difficult to obtain closed-form expression for convolution in \eqref{eq:signal}, and it is expensive to compute it numerically. It is more convenient to move to frequency domain:
+\begin{multline}
+\F(\Delta_{1,1} s) \approx \F\left(I_g \otimes h \otimes \Pi_{1\times 1}\right) \otimes \Delta_{1,1} + \F(n \, \Pi_{M\times M}\Delta_{1 \times 1}) =\\= (\F(I_g) \F(h) \F(\Pi_{1\times 1})) \otimes \Delta_{1,1} +\F(n \, \Pi_{M\times M}\Delta_{1,1}),
+\label{eq:signal_F}
+\end{multline}
+
+If components of the observation vector are statistically independent, then
+$$
+f_{\y\mid \x}(\y\mid \x) = \prod_{i=1}^N f_{\y \mid \mathbf{\xi},\x}(y_i \mid \mathbf{\xi}_i,\x),
+$$
+where $\mathbf{\xi}_i$ is a vector of parameters specific to $i$-th component of the observation vector. For example, $\mathbf{\xi}_i$ is a coordinate of $i$th pixel in case if $\y$ is a vector of pixel intensities, and $i$th spatial frequency if $\y$ is an image spectrum.
+
+\begin{multline}
+L_{\y\mid \x}(\y\mid \x) = \ln f_{\y\mid \x}(\y\mid \x) = \\ = \sum_{i=1}^N \ln f_{\y \mid \mathbf{\xi},\x}(y_i \mid \mathbf{\xi}_i,\x).
+\end{multline}
+
+Let $m\left(\xi,e,\theta\right)$ be an expected value of signal at point $\xi$. Assuming Gaussian noise with variance $\sigma^2$, we get
+$$
+f_{y \mid \xi,e,\theta}(y \mid \xi_i,e,\theta) = \frac{1}{\sqrt{2\pi} \sigma} \exp\left(-\frac{\left(y-m\left(\xi,e,\theta\right)\right)^2}{2\sigma^2}\right).
+$$
+
+$$
+m(\xi,e,\theta) = p_s\left(\xi^T A\left(e\right) \xi, \beta\right) p_g\left(\xi^T A\left(e_s\right) \xi\right)
+$$
+
+If the sample of galaxies
+has a probability distribution of intrinsic ellipticities (i.e. the value
+of ellipticity that would be measured by the observer in the absence
+of degradation by the PSF or by noise) is $f(e)$, then the probability
+
+\section{Likelihood approximation}
+Denote a log likelihood function
+\begin{equation}
+L_{\y\mid \x}(\y\mid \x) = \ln f_{\y\mid \x}(\y\mid \x).
+\end{equation}
+
+Let $L_{\y\mid \x}(\y_i \mid \x)$ reaches its maximum at $\x=\x_i$. As first derivatives vanish at extremum, second-order Taylor approximation to $L_{\y\mid \x}(\y_i \mid \x)$ is
+\begin{multline}
+L_{\y\mid \x}(\y_i \mid \x) \approx L_{\y \mid \x}(\y_i \mid \x_i)\, +\\+ \frac{1}{2} (\x-\x_i)^T \mathbf{H}_i (\x-\x_i),
+\end{multline}
+
+$$
+\mathbf{H}_i = D^2_{\x} L_{\y \mid \x}(\y_i \mid \x) \mid_{\x=\x_i}.
+$$
+
+\begin{multline}
+f_{\y\mid \x}(\y_i \mid \x) = \exp\left(L_{\y\mid \x}(\y_i \mid \x)\right) \approx \\ \approx f_{\y \mid \x}(\y_i \mid \x_i) \exp\left(\frac{1}{2} \left(\x-\x_i\right)^T \mathbf{H}_i (\x-\x_i)\right).
+\label{eq:f(y|x) approx}
+\end{multline}
+
+By substituting \eqref{eq:f(y|x) approx} into \eqref{eq:f(x|y)}, we get
+\begin{equation}
+f_{\x\mid \y}(\x\mid \y_i) \approx \frac{e^{\frac{1}{2} (\x-\x_i)^T \mathbf{H}_i (\x-\x_i)} f_{\x}(\x)}{\int e^{\frac{1}{2} (\x'-\x_i)^T \mathbf{H}_i (\x'-\x_i)} f_{\x}(\x') \,d\x'}.
+\end{equation}
+
+\begin{equation}
+f_{\x}(\x) = \int f_{\x \mid \y}(\x \mid \y) f_\y(\y) \,d\y \approx \frac{1}{N} \sum_{i=1}^N f_{\x \mid \y}(\x \mid \y_i)
+\end{equation}
+
+\begin{eqnarray*}
+f_{\x}^{(0)}(\x) & =& \mathrm{const}\\
+f_{\x\mid \y}^{(1)}(\x\mid \y_i) & =& (2\pi)^{-\frac{n}{2}} \left|-\mathbf{H}_i\right|^{\frac{1}{2}} \times \\
+& \times & e^{\frac{1}{2} (\x-\x_i)^T \mathbf{H}_i(\x-\x_i)}\\
+f_{\x}^{(k)}(\x) & = & \frac{1}{N} \sum_{i=1}^N f_{\x \mid \y}^{(k)}(\x \mid \y_i)\\
+f_{\x\mid \y}^{(k)}(\x\mid \y_i) & =& \frac{e^{\frac{1}{2} (\x-\x_i)^T \mathbf{H}_i (\x-\x_i)} f_{\x}^{(k-1)}(\x)}{\int e^{\frac{1}{2} (\x'-\x_i)^T \mathbf{H}_i (\x'-\x_i)} f_{\x}^{(k-1)}(\x') \,d\x'}\\
+f_{\x\mid \y}^{(2)}(\x\mid \y_i) & =& \frac{\sum_{j=1}^N \left|-\mathbf{H}_j\right|^{\frac{1}{2}} e^{\frac{1}{2} \left((\x-\x_j)^T \mathbf{H}_j(\x-\x_j) + (\x-\x_i)^T \mathbf{H}_i (\x-\x_i)\right)}}{ \sum_{j=1}^N \left|-\mathbf{H}_j\right|^{\frac{1}{2}} \int e^{\frac{1}{2} \left((\x'-\x_j)^T \mathbf{H}_j(\x'-\x_j) + (\x'-\x_i)^T \mathbf{H}_i (\x'-\x_i)\right)} \,d\x'}
+\end{eqnarray*}
+
+\section{Results}
+
+\section*{Acknowledgments}
+
+ \begin{thebibliography}{99}
+\bibitem[\protect\citeauthoryear{Miller et al.}{2007}]{Miller et el. 2007} Miller, L., Kitching, T. D., Heymans, C., Heavens, A. F. and Van Waerbeke, L. (2007), Bayesian galaxy shape measurement for weak lensing surveys – I. Methodology and a fast-fitting algorithm. Monthly Notices of the Royal Astronomical Society, 382: 315–324. doi: 10.1111/j.1365-2966.2007.12363.x
+
+\bibitem[\protect\citeauthoryear{Kitching et al.}{2008}]{Kitching et al. 2008} Kitching, T. D., Miller, L., Heymans, C. E., Van Waerbeke, L. and Heavens, A. F. (2008), Bayesian galaxy shape measurement for weak lensing surveys – II. Application to simulations. Monthly Notices of the Royal Astronomical Society, 390: 149–167. doi: 10.1111/j.1365-2966.2008.13628.x
+\end{thebibliography}
+
+\appendix
+
+\bsp
+
+\label{lastpage}
+
+\end{document}
