@@ -1,0 +1,745 @@
+classdef Model
+    properties
+        StarPosition = [0 0];
+        StarIntensity = 1;
+        StarBackgroundIntensity = 0;
+        StarA = [1 1];
+        StarC = 0;
+        
+        GalaxyPosition = [0 0];        
+        GalaxyIntensity = 1;       
+        GalaxyBackgroundIntensity = 0;
+        GalaxyA = [1 1];
+        GalaxyC = 0;
+        SersicIndex = 4;
+        MoffatBeta = 3;
+        
+        StarNoise = HighLambdaPoissonNoiseModel();
+        GalaxyNoise = HighLambdaPoissonNoiseModel();
+    end
+    
+    properties (Constant)
+%         Index = struct(...
+%             'StarPosition', [1 2], ...
+%             'StarIntensity', 3, ...
+%             'StarBackgroundIntensity', 4, ...
+%             'StarA', [5 6], ...
+%             'StarC', 7, ...
+%             'StarPhotonsPerLevel', 8, ...
+%             'GalaxyPosition', [9 10], ...
+%             'GalaxyIntensity', 11, ...
+%             'GalaxyBackgroundIntensity', 12, ...
+%             'GalaxyA', [13 14], ...
+%             'GalaxyC', 15, ...
+%             'GalaxyPhotonsPerLevel', 16, ...
+%             'SersicIndex', 17 ...
+%             );
+%         ParameterVectorLength = 17;
+        Index = struct(...
+            'StarPosition', [1 2], ...
+            'StarIntensity', 3, ...
+            'StarBackgroundIntensity', 4, ...
+            'StarA', [5 6], ...
+            'StarC', 7, ...
+            'GalaxyPosition', [8 9], ...
+            'GalaxyIntensity', 10, ...
+            'GalaxyBackgroundIntensity', 11, ...
+            'GalaxyA', [12 13], ...
+            'GalaxyC', 14, ...
+            'SersicIndex', 15, ...
+            'MoffatBeta', 16 ...
+            );
+        ParameterVectorLength = 16;
+
+        UpSampling = 1;
+    end
+    
+    properties (Dependent = true, SetAccess = public)
+        ParameterVector;
+    end
+    
+    properties (Dependent = true, SetAccess = immutable)
+        N;
+        Nup;
+        Nyx;
+        Nxy;
+    end
+    
+    properties (SetAccess = immutable)
+        Nx = 48;
+        Ny = 48;
+    end
+    
+    properties (Dependent = true, SetAccess = private)
+        PSFInvCovariance;
+        PSFCovariance;
+        GalaxyInvCovariance;
+        GalaxyCovariance;
+    end
+    
+    properties (SetAccess = private, GetAccess = private)
+        XY;
+        XYup;
+    end
+    
+    methods
+        function obj = Model()
+            [X, Y] = meshgrid((1 : obj.Nx) - 1/2, (1 : obj.Ny) - 1/2);
+            obj.XY = [X(:), Y(:)];
+            
+            [Xup, Yup] = meshgrid(((1 : obj.Nx * obj.UpSampling) - 1/2) / obj.UpSampling, ...
+                ((1 : obj.Ny * obj.UpSampling) - 1/2) / obj.UpSampling);
+            obj.XYup = [Xup(:), Yup(:)];
+        end
+        
+        function theta = get.ParameterVector(obj)
+            theta = [...
+                obj.StarPosition, ...
+                obj.StarIntensity, ...
+                obj.StarBackgroundIntensity, ...
+                obj.StarA, ...
+                obj.StarC, ...
+                obj.GalaxyPosition, ...
+                obj.GalaxyIntensity, ...
+                obj.GalaxyBackgroundIntensity, ...
+                obj.GalaxyA, ...
+                obj.GalaxyC, ...
+                obj.SersicIndex, ...
+                obj.MoffatBeta
+                ];
+        end
+        
+        function A = get.PSFInvCovariance(obj)
+            A = [...
+                [obj.StarA(1), obj.StarC * sqrt(prod(obj.StarA))]; ...
+                [obj.StarC * sqrt(prod(obj.StarA)), obj.StarA(2)]...
+                ];
+        end
+        
+        function Sigma = get.PSFCovariance(obj)
+            Sigma = inv(obj.PSFInvCovariance);
+        end
+        
+        function this = set.StarNoise(this, value)
+            if ~isa(value, 'NoiseModel')
+                error('Value for StarNoise must be a NoiseModel');
+            end
+            
+            this.StarNoise = value;
+        end
+        
+        function this = set.GalaxyNoise(this, value)
+            if ~isa(value, 'NoiseModel')
+                error('Value for GalaxyNoise must be a NoiseModel');
+            end
+            
+            this.GalaxyNoise = value;
+        end
+        
+        function this = set.StarIntensity(this, value)
+            if value < 0
+                error('StarIntensity out of range');
+            end
+            
+            this.StarIntensity = value;
+        end
+        
+        function this = set.StarBackgroundIntensity(this, value)
+            if value < 0
+                error('StarBackgroundIntensity out of range');
+            end
+            
+            this.StarBackgroundIntensity = value;
+        end
+        
+        function this = set.StarA(this, value)
+            if any(value) <= 0
+                error('StarA out of range');
+            end
+            
+            this.StarA = value;
+        end
+        
+        function this = set.StarC(this, value)
+            if abs(value) >= 1
+                error('StarC out of range');
+            end
+            
+            this.StarC = value;
+        end
+        
+        function this = set.GalaxyIntensity(this, value)
+            if value < 0
+                error('GalaxyIntensity out of range');
+            end
+            
+            this.GalaxyIntensity = value;
+        end
+        
+        function this = set.GalaxyBackgroundIntensity(this, value)
+            if value < 0
+                error('GalaxyBackgroundIntensity out of range');
+            end
+            
+            this.GalaxyBackgroundIntensity = value;
+        end
+        
+        function this = set.GalaxyA(this, value)
+            if any(value) <= 0
+                error('GalaxyA out of range');
+            end
+            
+            this.GalaxyA = value;
+        end
+        
+        function this = set.GalaxyC(this, value)
+            if abs(value) >= 1
+                error('GalaxyC out of range');
+            end
+            
+            this.GalaxyC = value;
+        end
+        
+        function this = set.SersicIndex(this, value)
+            if value < 0.4
+                error('SersicIndex out of range');
+            end
+            
+            this.SersicIndex = value;
+        end
+        
+        function this = set.MoffatBeta(this, value)
+            if value <= 1
+                error('MoffatBeta out of range');
+            end
+            
+            this.MoffatBeta = value;
+        end
+        
+        function obj = set.ParameterVector(obj, theta)
+            obj.StarPosition = theta(Model.Index.StarPosition);
+            obj.StarIntensity = theta(Model.Index.StarIntensity);
+            obj.StarBackgroundIntensity = theta(Model.Index.StarBackgroundIntensity);
+            obj.StarA = theta(Model.Index.StarA);
+            obj.StarC = theta(Model.Index.StarC);
+            %obj.StarNoise.PhotonsPerLevel = theta(Model.Index.StarPhotonsPerLevel);
+            obj.GalaxyPosition = theta(Model.Index.GalaxyPosition);
+            obj.GalaxyIntensity = theta(Model.Index.GalaxyIntensity);
+            obj.GalaxyBackgroundIntensity = theta(Model.Index.GalaxyBackgroundIntensity);
+            obj.GalaxyA = theta(Model.Index.GalaxyA);
+            obj.GalaxyC = theta(Model.Index.GalaxyC);
+            %obj.GalaxyNoise.PhotonsPerLevel = theta(Model.Index.GalaxyPhotonsPerLevel);
+            obj.SersicIndex = theta(Model.Index.SersicIndex);
+            obj.MoffatBeta = theta(Model.Index.MoffatBeta);
+        end
+        
+        function img = GenerateImage(obj, noise)
+            %
+            if nargin < 2
+                noise = false;
+            end
+
+            img = ImagePair;
+            img.NoiseFreeStar = reshape(obj.Star(), [obj.Ny, obj.Nx]);
+            img.NoiseFreeGalaxy = reshape(obj.Galaxy(), [obj.Ny, obj.Nx]);
+
+            if noise
+                img.Star = obj.StarNoise.AddNoise(img.NoiseFreeStar);
+                img.Galaxy = obj.GalaxyNoise.AddNoise(img.NoiseFreeGalaxy);
+            else
+                img.Star = img.NoiseFreeStar;
+                img.Galaxy = img.NoiseFreeGalaxy;
+            end
+        end
+        
+        function r = R_Star(this)
+            r = this.XY - ones(this.N, 1) * this.StarPosition;
+            r = sqrt(sum((r * this.PSFInvCovariance) .* r, 2));
+        end
+        
+        function r = R_Galaxy(this)
+            r = this.XY - ones(this.N, 1) * this.GalaxyPosition;
+            r = sqrt(sum((r * this.GalaxyInvCovariance) .* r, 2));
+        end
+        
+        function [Fs_expected, dFs_expected] = this.StarF(this)
+            % Computes power spectrum for star picture and its derivatives
+            % w.r.t. parameters.
+            % NOTICE: Backgound level is added!
+            
+        end
+        
+        function [lambda_s, dl_s] = Star(this)
+            % Computes intensity for star picture and their derivatives
+            % w.r.t. parameters.
+            % NOTICE: Backgound level is added!
+            N = this.N;
+            I_s = this.StarIntensity;
+            r_s = this.XYup - ones(this.Nup, 1) * this.StarPosition;
+            
+            if nargout < 2
+                h = this.Kernel(r_s);
+            else
+                [h, dh, grad_h] = this.Kernel(r_s);
+                dh = this.Downsample(dh);
+                grad_h = this.Downsample(grad_h);
+            end
+            
+            h = this.Downsample(h);
+            
+            lambda1_s = I_s * h;
+            lambda_s = lambda1_s + this.StarBackgroundIntensity;
+            
+            if nargout > 1
+                K = Model.ParameterVectorLength;
+                
+                % d\lambda_s/d\theta
+                % d\lambda_s/d\(A_s, beta, ..., ?)
+                dl_s = I_s * dh;
+                
+                % d\lambda_s/d(x0, y0)
+                dl_s(:, Model.Index.StarPosition) = -I_s * grad_h;
+                
+                % d\lambda_s/dIs
+                dl_s(:, Model.Index.StarIntensity) = h;
+                
+                % d\lambda_s/d\lambda0_s
+                dl_s(:, Model.Index.StarBackgroundIntensity) = 1;
+            end
+        end
+        
+        function A = get.GalaxyInvCovariance(obj)
+            A = [...
+                [obj.GalaxyA(1), obj.GalaxyC * sqrt(prod(obj.GalaxyA))]; ...
+                [obj.GalaxyC * sqrt(prod(obj.GalaxyA)), obj.GalaxyA(2)]...
+                ];
+        end
+        
+        function A = get.GalaxyCovariance(obj)
+            A = inv(obj.GalaxyInvCovariance);
+        end
+        
+        function [lambda1_g, dl1_g, grad] = GalaxyProfile(this, r_squared)
+            % Computes galaxy intensity profile, its derivative w.r.t.
+            % parameters and w.r.t. r_squared for given squared radii
+            % r_squared.
+            % NOTICE: Backgound level is NOT added!
+            profile_type = 'Sersic';
+            dl1_g = [];
+            grad = [];
+            N = size(r_squared, 1);
+            
+            switch profile_type
+                case 'Sersic'
+                    lambda1_g = this.GalaxyIntensity * exp(-r_squared.^(1 / (2 * this.SersicIndex)));
+            
+                    if nargout > 1
+                        dl1_g = zeros(N, Model.ParameterVectorLength);
+                        dl1_g(:, Model.Index.GalaxyIntensity) = lambda1_g / this.GalaxyIntensity;
+                        dl1_g(:, Model.Index.SersicIndex) = r_squared.^(1 / (2 * this.SersicIndex)) ...
+                            .* log(r_squared) .* lambda1_g / (2 * this.SersicIndex^2);
+                        dl1_g(r_squared == 0, Model.Index.SersicIndex) = 0;
+                    end
+
+                    if nargout > 2
+                        grad = -r_squared.^(1 / (2 * this.SersicIndex) - 1) .* lambda1_g / (2 * this.SersicIndex);
+                    end
+                    
+                case 'Gaussian'
+                    lambda1_g = this.GalaxyIntensity * exp(-1 / 2 * r_squared);
+            
+                    if nargout > 1
+                        dl1_g = zeros(N, Model.ParameterVectorLength);
+                        dl1_g(:, Model.Index.GalaxyIntensity) = lambda1_g / this.GalaxyIntensity;
+                    end
+
+                    if nargout > 2
+                        grad = -1 / 2 * lambda1_g;
+                    end
+                    
+                otherwise
+                    error 'Unknown galaxy profile type';
+            end
+            
+            if ~all(isfinite(lambda1_g(:)))
+                error('lambda1_g is not finite!');
+            end
+            
+            if ~all(isfinite(dl1_g(:)))
+                error('dl1_g is not finite!');
+            end
+            
+            if ~all(isfinite(grad(:)))
+                 error('grad is not finite!');
+            end
+        end
+        
+        function [lambda_g, dl_g] = Galaxy(this)
+            % Computes galaxy intensities (without background) and their
+            % derivatives wrt parameters.
+            % NOTICE: Backgound level is added!
+            N = this.Nup;
+            K = Model.ParameterVectorLength;
+            Nyx_up = this.Nyx * this.UpSampling;
+            
+            A_g = this.GalaxyInvCovariance;
+            r_g = this.XYup - ones(N, 1) * this.GalaxyPosition;
+            
+            % PSF, the convolution kernel.
+            kernel_center = (floor((this.Nxy * this.UpSampling + 1) / 2) - 1/2) / this.UpSampling;
+            
+            if nargout > 1
+                [lambda1_g, dl1_g, grad_l1g] = this.GalaxyProfile(sum((r_g * A_g) .* r_g, 2));
+                [h, dh] = this.Kernel(this.XYup - ones(N, 1) * kernel_center);
+                dh = reshape(dh, [Nyx_up K]);
+                
+                dl1_g = dl1_g / this.UpSampling^2;
+                grad_l1g = grad_l1g / this.UpSampling^2;
+            else
+                lambda1_g = this.GalaxyProfile(sum((r_g * A_g) .* r_g, 2));
+                h = this.Kernel(this.XYup - ones(N, 1) * kernel_center);                
+            end
+            
+            lambda1_g = lambda1_g / this.UpSampling^2;
+            h = reshape(h, Nyx_up);
+            
+            % Compute intensity convolution.
+            lambda_g = this.GalaxyBackgroundIntensity + fftconv2(reshape(lambda1_g, Nyx_up), h);
+            lambda_g = this.Downsample(lambda_g(:));
+            
+            if nargout > 1
+                % d\lambda1_g/d\theta
+                % dl1_g w.r.t. all parameters except GalaxyPosition and GalaxyA, GalaxyC has
+                % already been computed by GalaxyProfile().
+                
+                % d\lambda1_g/d(x0_g, y0_g)
+                dl1_g(:, this.Index.GalaxyPosition) = -2 * grad_l1g * [1 1] .* (r_g * A_g);
+
+                % d\lambda1_g/dI_g -- already computed.
+
+                % d\lambda1_g/d\lambda0_g
+                % In contrast with Star(), this term is 0, because here we
+                % compute derivative of lambda1, which does not include
+                % lambda0. Derivative w.r.t. lambda0 will be added later on.
+                dl1_g(:, Model.Index.GalaxyBackgroundIntensity) = 0;
+
+                % d\lambda1_g/d\A_g
+                dldA_g = zeros(N, 2, 2);
+
+                for i = 1 : 2
+                    for j = 1 : 2
+                        dldA_g(:, i, j) = grad_l1g .* (r_g(:, i) .* r_g(:, j));
+                    end
+                end
+
+                a_g = this.GalaxyA;
+                c_g = this.GalaxyC;
+                sqrt_prod_a_g = sqrt(prod(a_g));
+                
+                dl1_g(:, [Model.Index.GalaxyA, Model.Index.GalaxyC]) = reshape(dldA_g, N, 4) * ...
+                    [[1 0 0];...
+                    [a_g(2) * c_g / (2 * sqrt_prod_a_g), a_g(1) * c_g / (2 * sqrt_prod_a_g), sqrt_prod_a_g];
+                    [a_g(2) * c_g / (2 * sqrt_prod_a_g), a_g(1) * c_g / (2 * sqrt_prod_a_g), sqrt_prod_a_g];
+                    [0 1 0]];
+
+                % d\lambda1_g/dk_g = 0
+                %dl1_g(:, Model.Index.GalaxyPhotonsPerLevel) = 0;
+                
+                % d\lambda_g/d\theta
+                dl1_g = reshape(dl1_g, [Nyx_up K]);   % reshape array to use it in convolutions.
+                
+                % Compute convolution derivative.
+%                 dl_g = gather(dconv2(gpuArray(dl1_g), gpuArray(h), ...
+%                     reshape(gpuArray(lambda1_g), Nyx_up), gpuArray(dh)));
+                
+                dl_g = dconv2(dl1_g, h, reshape(lambda1_g, Nyx_up), dh);
+
+                dl_g = reshape(dl_g, [N K]);    % restore derivative array shape.
+                dl_g(:, Model.Index.GalaxyBackgroundIntensity) = 1;    % d\lambda_g/d\lambda0_g
+                
+                if ~all(isfinite(dl_g(:)))
+                    error('dl_g invalid value');
+                end
+                
+                dl_g = this.Downsample(dl_g);
+            end
+        end
+        
+        function [p, dp_dtheta, dp_dxi] = StarProfileF(this, xi)
+            beta = this.MoffatBeta;
+            p = 2 * pi^beta * xi.^(-1 + beta) .* besselk(1 - beta, 2*pi*xi) / gamma(beta);
+            
+            if nargout > 1
+                error('No alanytical experssion for besselk() derivative w.r.t. order... 8-(');
+                
+                dp_dxi = -4 * pi^(1 + beta) * xi.^(-1 + beta) .* besselk(-2 + beta, 2*pi*xi) / gamma(beta);
+%                 dp_dtheta = 1 / gamma(beta) * 2 * pi^beta * xi^(-1 + beta) ...
+%                     .* (besselk(-1 + beta, 2*pi*xi) .* (log(pi * xi) - psi(0, beta)) ...
+%                     - besselk();
+            end
+        end
+        
+        function [p, dp_dtheta, dpdr2] = StarProfile(this, r_squared)
+            beta = this.MoffatBeta;
+            p = 2 * (beta - 1) * (1 + r_squared).^(-beta);
+            
+            if nargout > 1
+                dpdr2 = -2 * (1 + r_squared).^(-1 - beta) * (beta - 1) * beta;
+                dp_dtheta = (1 + r_squared).^(-beta) .* (2 - 2 * (beta - 1) * log(1 + r_squared));
+            end
+        end
+        
+        function [h, dh, grad_h] = Kernel(this, r)
+            % Computes convolution kernel, its derivatives w.r.t.
+            % parameters and gradient.
+            % h - convolution kernel,
+            % dh - h derivatives w.r.t parameters
+            % grad_h - gradient of h w.r.t. (x,y).
+            A = this.PSFInvCovariance;
+            
+            if nargout > 1
+                [p, dp_dtheta, dpdr2] = this.StarProfile(sum((r * A) .* r, 2));
+            else
+                p = this.StarProfile(sum((r * A) .* r, 2));
+            end
+            
+            h = sqrt(det(A)) / (2 * pi) * p;
+            
+            if nargout > 1
+                N = size(r, 1);
+                K = Model.ParameterVectorLength;
+            
+                % dh/d\theta
+                dh = zeros(N, K);
+                
+                % dh/d(x0, y0) = 0 -- because it is a kernel,
+                % independent of star position!
+                %
+                % dh/dIs = 0 -- because kernel does not depend on star
+                % intensity.
+                %
+                % dh/d\lambda0_s = 0
+                %
+                % dh/d\A_s
+                invA_s = this.PSFCovariance;
+                dhdA_s = zeros(N, 2, 2);
+                
+                for i = 1 : 2
+                    for j = 1 : 2
+                        dhdA_s(:, i, j) = sqrt(det(A)) / (2*pi) * (dpdr2 .* r(:, i) .* r(:, j) ...
+                            + 1/2 * invA_s(i, j) * p);
+                    end
+                end
+                
+                a_s = this.StarA;
+                c_s = this.StarC;
+                sqrt_prod_a_s = sqrt(prod(a_s));
+                
+                dh(:, [Model.Index.StarA, Model.Index.StarC]) = reshape(dhdA_s, N, 4) * ...
+                    [[1 0 0];...
+                    [a_s(2) * c_s / (2 * sqrt_prod_a_s), a_s(1) * c_s / (2 * sqrt_prod_a_s), sqrt_prod_a_s];
+                    [a_s(2) * c_s / (2 * sqrt_prod_a_s), a_s(1) * c_s / (2 * sqrt_prod_a_s), sqrt_prod_a_s];
+                    [0 1 0]];
+                
+                % dh/d MoffatBeta
+                dh(:, Model.Index.MoffatBeta) = sqrt(det(A)) / (2 * pi) * dp_dtheta;
+                
+                if nargout > 2
+                    % Compute gradient w.r.t. (x,y)
+                    grad_h = sqrt(det(A)) / pi * dpdr2 * [1 1] .* (r * A);
+                end
+            end
+        end
+        
+        function [l, grad] = LogLikelihood(this, img)
+            %
+            s = img.Star(:);
+            g = img.Galaxy(:);
+            N = this.N;
+            
+            Fs = img.StarF(:);
+
+            if nargout < 2
+                Fs_expected = this.StarF();
+                lambda_g = this.Galaxy();
+                
+                l_s = this.StarNoise.LogLikelihoodF(Fs, Fs_expected);  % star term
+                l_g = this.GalaxyNoise.LogLikelihood(g, lambda_g);   % galaxy term
+            else
+                [Fs_expected, dFs_expected] = this.StarF();
+                [lambda_g, dl_g] = this.Galaxy();
+                
+                [l_s, grad_s] = this.StarNoise.LogLikelihoodF(s, Fs_expected);  % star term
+                [l_g, grad_g] = this.GalaxyNoise.LogLikelihood(g, lambda_g);   % galaxy term
+                
+                grad = grad_s.' * dFs_expected + grad_g.External.' * dl_g;
+                %grad(:, Model.Index.StarPhotonsPerLevel) = sum(grad_s.Internal);
+                %grad(:, Model.Index.GalaxyPhotonsPerLevel) = sum(grad_g.Internal);
+                
+                if any(isinf(grad)) || any(isnan(grad))
+                    error('5');
+                end
+            end
+            
+            l = sum(l_s) + sum(l_g);
+
+            if isinf(l) || isnan(l)
+                error('4');
+            end
+        end
+        
+        function n = get.N(this)
+            n = this.Nx * this.Ny;
+        end
+        
+        function n = get.Nup(this)
+            n = this.Nx * this.Ny * this.UpSampling^2;
+        end
+        
+        function n = get.Nyx(this)
+            n = [this.Ny, this.Nx];
+        end
+        
+        function n = get.Nxy(this)
+            n = [this.Nx, this.Ny];
+        end
+        
+        function [e, a, b, theta] = Ellipticity(this)
+            % Compute ellipticity from galaxy and star params.
+            [V, D] = eig(this.GalaxyCovariance);
+
+            r = sqrt(diag(D));
+            [a, a_ind] = max(r);
+            b = sum(r) - a;
+            theta = -atan2(V(2, a_ind), V(1, a_ind)); % minus is required to conform reference data
+
+            e = (a - b) / (a + b) * [cos(2 * theta), sin(2 * theta)];
+        end
+    end % methods
+   
+    methods (Static)
+        function [model, Sigma, grad, fval] = Estimate(img, varargin)
+            % Estimate parameters from star+galaxy image pair.
+            %   model -- estimated parameters.
+            %   Sigma -- covariance matrix of estimate.
+
+            % Initialize problem
+            model = Model();
+            
+            star_radius_min = 0.5;
+            star_radius_max = 10;
+            star_radius_initial = 2;
+
+            galaxy_radius_min = 0.5;
+            galaxy_radius_max = 10;
+            galaxy_radius_initial = 4.24;
+
+            % Set initial approximation.
+            problem.x0(Model.Index.StarPosition) = [25 24];
+            problem.x0(Model.Index.StarIntensity) = 6000;
+            %problem.x0(Model.Index.StarPhotonsPerLevel) = 2;
+            problem.x0(Model.Index.StarBackgroundIntensity) = ...
+                model.StarNoise.EstimateBackground(img.Star);
+            problem.x0(Model.Index.StarA) = 1 ./ (star_radius_initial * [1 1]).^2;
+            problem.x0(Model.Index.StarC) = 0;
+            problem.x0(Model.Index.GalaxyPosition) = [25 24];
+            problem.x0(Model.Index.GalaxyIntensity) = 45;
+            %problem.x0(Model.Index.GalaxyPhotonsPerLevel) = 2;
+            problem.x0(Model.Index.GalaxyBackgroundIntensity) = ...
+                model.GalaxyNoise.EstimateBackground(img.Galaxy);
+            problem.x0(Model.Index.GalaxyA) = 1 ./ (galaxy_radius_initial * [1 1]).^2;
+            problem.x0(Model.Index.GalaxyC) = 0;
+            problem.x0(Model.Index.SersicIndex) = 0.5;
+            problem.x0(Model.Index.MoffatBeta) = 3.0;
+
+            % Set problem lower bounds.
+            problem.lb(Model.Index.StarPosition) = [20 20];
+            problem.lb(Model.Index.StarIntensity) = 1000;
+            %problem.lb(Model.Index.StarPhotonsPerLevel) = 1;
+            problem.lb(Model.Index.StarBackgroundIntensity) = 40;
+            problem.lb(Model.Index.StarA) = 1 ./ (star_radius_max * [1 1]).^2;
+            problem.lb(Model.Index.StarC) = -0.5;
+            problem.lb(Model.Index.GalaxyPosition) = [20 20];
+            problem.lb(Model.Index.GalaxyIntensity) = 20;
+            %problem.lb(Model.Index.GalaxyPhotonsPerLevel) = 1;
+            problem.lb(Model.Index.GalaxyBackgroundIntensity) = 70;
+            problem.lb(Model.Index.GalaxyA) = 1 ./ (galaxy_radius_max * [1 1]).^2;
+            problem.lb(Model.Index.GalaxyC) = -0.9;
+            problem.lb(Model.Index.SersicIndex) = 0.4;
+            problem.lb(Model.Index.MoffatBeta) = 1.01;
+
+            % Set problem upper bounds.
+            problem.ub(Model.Index.StarPosition) = [30 30];
+            problem.ub(Model.Index.StarIntensity) = 8000;
+            %problem.ub(Model.Index.StarPhotonsPerLevel) = 3;
+            problem.ub(Model.Index.StarBackgroundIntensity) = 200;
+            problem.ub(Model.Index.StarA) = 1 ./ (star_radius_min * [1 1]).^2;
+            problem.ub(Model.Index.StarC) = 0.5;
+            problem.ub(Model.Index.GalaxyPosition) = [30 30];
+            problem.ub(Model.Index.GalaxyIntensity) = 3000; %20000;
+            %problem.ub(Model.Index.GalaxyPhotonsPerLevel) = 3;
+            problem.ub(Model.Index.GalaxyBackgroundIntensity) = 300; %200;
+            problem.ub(Model.Index.GalaxyA) = 1 ./ (galaxy_radius_min * [1 1]).^2;
+            problem.ub(Model.Index.GalaxyC) = 0.9;
+            problem.ub(Model.Index.SersicIndex) = 10;
+            problem.ub(Model.Index.MoffatBeta) = 10.0;
+
+            % Check parameters and bounds.
+            if ~all(problem.lb < problem.x0)
+                error('lb < x0 condition must be satisfied!');
+            end
+
+            if ~all(problem.x0 < problem.ub)
+                error('x0 < ub condition must be satisfied!');
+            end
+
+%             hess_pattern = zeros(Model.ParameterVectorLength);
+%             hess_pattern(1 : Model.ParameterVectorLength / 2, 1 : Model.ParameterVectorLength / 2) = 1;
+%             hess_pattern(Model.ParameterVectorLength / 2 + 1 : end, Model.ParameterVectorLength / 2 + 1 : end) = 1;
+
+            problem.options = optimset('Display', 'notify', 'TolFun', 1e-8, ...
+                'FunValCheck', 'on', 'GradObj', 'on', 'Hessian', 'off');
+            
+            if nargin > 1
+                problem.options = optimset(problem.options, varargin{1});
+            end
+
+            problem.solver = 'fmincon';
+            problem.objective = @(x) Model.Objective(img, model, x);
+
+            % Start optimization
+            [x, fval, exitflag, output, lambda, grad, hessian] = fmincon(problem);
+            model.ParameterVector = x;
+            Sigma = full(inv(hessian));
+        end
+    end
+    
+    methods (Access = private)
+        function h = Downsample(this, h)
+            size_orig = size(h);
+            sz = [this.Nyx * this.UpSampling, size_orig(end)];
+            h = imresize(reshape(h, sz), this.Nyx, 'box');
+            h = reshape(h, [this.N, size_orig(end)]);
+        end
+    end
+    
+    methods (Static, Access = private)
+        function [l, grad, Hess] = Objective(img, model, x)
+            %
+            model.ParameterVector = x;
+
+            if nargout > 2
+                [l, grad, Hess] = model.LogLikelihood(img);
+                l = -l;
+                grad = -grad;
+                Hess = -Hess;
+            elseif nargout > 1
+                [l, grad] = model.LogLikelihood(img);
+                l = -l;
+                grad = -grad;
+            else
+                l = -model.LogLikelihood(img);
+            end
+        end
+    end
+end % classdef
